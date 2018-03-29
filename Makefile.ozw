@@ -1,0 +1,12 @@
+#
+# OpenZWave related includes
+#
+
+OZW_ROOT			= ${HOME}/open-zwave
+OZW_CPP				= ${OZW_ROOT}/cpp
+OZW_SRC 			= ${OZW_CPP}/src
+OZW_CMD_CLASSES 	= ${OZW_SRC}/command_classes
+OZW_AES 			= ${OZW_SRC}/aes
+OZW_PLATFORM 		= ${OZW_SRC}/platform
+OZW_VALUE_CLASSES 	= ${OZW_SRC}/value_classes
+OZW_SYSCONFDIR		= /etc/openzwave
