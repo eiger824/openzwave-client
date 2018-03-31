@@ -333,10 +333,7 @@ int main( int argc, char* argv[] )
     pthread_mutex_lock( &initMutex );
 
     // Create the OpenZWave Manager.
-    // The first argument is the path to the config files (where the manufacturer_specific.xml file is located
-    // The second argument is the path for saved Z-Wave network state and the log file.  If you leave it NULL 
-    // the log file will appear in the program's working directory.
-    Options::Create(config, config, "", create_success);
+    Options::Create(config, LOG_DIR, "", create_success);
     if (!create_success)
     {
         Log::Write(LogLevel_Error,
