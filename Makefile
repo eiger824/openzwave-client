@@ -18,9 +18,10 @@ OBJ = main.o \
 all: ${PROGRAM}
 
 ${PROGRAM}: main.o
-	test -d logs || mkdir logs
+	rm -rf logs && mkdir logs
 	test -d bin  || mkdir bin
 	${CXX} $^ ${LDFLAGS} -o $@
+	rm -f ${PROGNAME}
 	ln -s ${PROGRAM} ${PROGNAME}
 
 main.o: main.cpp
@@ -29,6 +30,8 @@ main.o: main.cpp
 clean:
 	rm -rf ${PROGRAM} ${OBJ} *.~ bin ${PROGNAME} logs
 
-run:
-	LD_LIBRARY_PATH=${LD_LIBRARY_PATH}:${OZW_ROOT} ./${PROGRAM}
+run: ${PROGRAM}
+	./${PROGNAME} --config=${HOME}/open-zwave/config 1
 
+run-verbose: ${PROGRAM}
+	./${PROGNAME} --config=${HOME}/open-zwave/config --verbose 1
