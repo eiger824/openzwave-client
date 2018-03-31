@@ -3,6 +3,7 @@
 #include <unistd.h>
 #include <string>
 #include <stdlib.h>
+#include <thread>
 #include <pthread.h>
 #include <getopt.h>
 
@@ -16,9 +17,10 @@
 #include "value_classes/Value.h"
 #include "value_classes/ValueBool.h"
 #include "platform/Log.h"
+#include "command_classes/SwitchBinary.h"
 #include "Defs.h"
 
-#define     SWITCH_BINARY_ID    15
+#define     SWITCH_BINARY_ID    21 
 #define     LOG_DIR             "logs"
 
 using namespace OpenZWave;
@@ -29,13 +31,12 @@ using std::string;
 
 bool temp = false;
 
-static int verbose_flag;
 static uint32 g_homeId = 0;
 static bool   g_initFailed = false;
 
 static struct option  long_options[] =
 {
-    {"verbose"  , no_argument       , &verbose_flag , true  },
+    {"verbose"  , no_argument       , 0             , 'v'   },
     {"port"     , required_argument , 0             , 'p'   },
     {"config"   , required_argument , 0             , 'c'   },
     {"help"     , no_argument       , 0             , 'h'   },
@@ -72,7 +73,7 @@ bool ToggleSwitchBinary(const int node_Id, bool status)
             {
                 ValueID v = *it2;
                 cout << "v.GetCommandClassId() = 0x" << hex << static_cast<int>(v.GetCommandClassId()) << dec << endl;
-                if (v.GetCommandClassId() == 0x25)
+                if (v.GetCommandClassId() == SwitchBinary::StaticGetCommandClassId())
                 {
                     cout << "Setting value ..." << endl;
                     Manager::Get()->SetValue(v, status);
@@ -96,6 +97,7 @@ void help(string program)
     cout << left << setw(width) << "--help" << "Show this help and exit." << right << endl;
     cout << left << setw(width - internal_width) << "--port" << setw(internal_width) << "<tty>"
         << "Choose USB serial port." << endl;
+    cout << left << setw(width) << "--silent" << "Don't output anything to console." << endl;
     cout << left << setw(width) << "--verbose" << "Output some verbose." << endl;
 }
 
@@ -277,24 +279,28 @@ int main( int argc, char* argv[] )
     int c, optindex;
     bool create_success {false}, new_status;
     pthread_mutexattr_t mutexattr;
+    bool verbose = false;
 
     /* Default port */
     string port{ "/dev/ttyACM0" };
     string config{ "./config/" };
 
     /* Parse command line options */
-    while ( (c = getopt_long(argc, argv, "c:hp:", long_options, &optindex)) != -1)
+    while ( (c = getopt_long(argc, argv, "c:hp:v", long_options, &optindex)) != -1)
     {
         switch (c)
         {
+            case 'c':
+                config = string{optarg};
+                break;
             case 'h':
                 help( string{argv[0]} );
                 return 0;
             case 'p':
                 port = string{optarg};
                 break;
-            case 'c':
-                config = string{optarg};
+            case 'v':
+                verbose = true;
                 break;
             case '?':
                 help( string{argv[0]} );
@@ -330,7 +336,7 @@ int main( int argc, char* argv[] )
     // The first argument is the path to the config files (where the manufacturer_specific.xml file is located
     // The second argument is the path for saved Z-Wave network state and the log file.  If you leave it NULL 
     // the log file will appear in the program's working directory.
-    Options::Create(config, LOG_DIR, "", create_success);
+    Options::Create(config, config, "", create_success);
     if (!create_success)
     {
         Log::Write(LogLevel_Error,
@@ -347,6 +353,7 @@ int main( int argc, char* argv[] )
     Options::Get()->AddOptionInt( "PollInterval", 500 );
     Options::Get()->AddOptionBool( "IntervalBetweenPolls", true );
     Options::Get()->AddOptionBool("ValidateValueChanges", true);
+    Options::Get()->AddOptionBool("ConsoleOutput", verbose );
     Options::Get()->Lock();
 
     Manager::Create();
@@ -359,69 +366,25 @@ int main( int argc, char* argv[] )
 
     // Add a Z-Wave Driver
     Manager::Get()->AddDriver( port );
-    cout << "AddDriver() [done]" << endl;
 
     // Now we just wait for either the AwakeNodesQueried or AllNodesQueried notification,
     // then write out the config file.
     // In a normal app, we would be handling notifications and building a UI for the user.
     pthread_cond_wait( &initCond, &initMutex );
 
-    // Since the configuration file contains command class information that is only 
-    // known after the nodes on the network are queried, wait until all of the nodes 
-    // on the network have been queried (at least the "listening" ones) before
-    // writing the configuration file.  (Maybe write again after sleeping nodes have
-    // been queried as well.)
-    /*
-    if( !g_initFailed )
+
+    for (;;)
     {
-        cout << endl << endl << endl << "Here" << endl << endl << endl;
+        ToggleSwitchBinary(SWITCH_BINARY_ID, new_status);
+        new_status = !new_status;
 
-        // The section below demonstrates setting up polling for a variable.  In this simple
-        // example, it has been hardwired to poll COMMAND_CLASS_BASIC on the each node that 
-        // supports this setting.
-        pthread_mutex_lock( &g_criticalSection );
-        for( list<NodeInfo*>::iterator it = g_nodes.begin(); it != g_nodes.end(); ++it )
-        {
-            NodeInfo* nodeInfo = *it;
-
-            // skip the controller (most likely node 1)
-            if( nodeInfo->m_nodeId == 1) continue;
-
-            cout << "NodeID: " << nodeInfo->m_nodeId << endl;
-            cout << "\t NodeName: " << Manager::Get()->GetNodeName(nodeInfo->m_homeId,nodeInfo->m_nodeId) << endl;
-            cout << "\t ManufacturerName: " << 
-                Manager::Get()->GetNodeManufacturerName(nodeInfo->m_homeId,nodeInfo->m_nodeId) << endl;
-            cout << "\t NodeProductName: " <<
-                Manager::Get()->GetNodeProductName(nodeInfo->m_homeId,nodeInfo->m_nodeId) << endl;
-            cout << "Values announced by the nodes without polling:" << endl;
-
-            for( list<ValueID>::iterator it2 = nodeInfo->m_values.begin(); it2 != nodeInfo->m_values.end(); ++it2 )
-            {
-                ValueID v = *it2;
-                cout << "\t ValueLabel: " << Manager::Get()->GetValueLabel(v) << endl;
-                cout << "\t\t ValueType: " << v.GetType() << endl;
-                cout << "\t\t ValueHelp: " << Manager::Get()->GetValueHelp(v) << endl;
-                cout << "\t\t ValueUnits: " << Manager::Get()->GetValueUnits(v) << endl;
-                cout << "\t\t ValueMin: " << Manager::Get()->GetValueMin(v) << endl;
-                cout << "\t\t ValueMax: " << Manager::Get()->GetValueMax(v) << endl;
-
-                if( v.GetCommandClassId() == COMMAND_CLASS_BASIC )
-                {
-                    //Manager::Get()->EnablePoll( v, 2 );		// enables polling with "intensity" of 2, though this is irrelevant with only one value polled
-                    break;
-                }
-            }
-        }
-        pthread_mutex_unlock( &g_criticalSection );
+        sleep(1);
     }
-    */
-
-    ToggleSwitchBinary(SWITCH_BINARY_ID, new_status);
 
     Manager::Get()->RemoveDriver( port );
-
     Manager::Get()->RemoveWatcher( OnNotification, NULL );
     Manager::Destroy();
+
     Options::Destroy();
     pthread_mutex_destroy( &g_criticalSection );
 
