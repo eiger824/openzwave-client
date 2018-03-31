@@ -1,0 +1,28 @@
+#!/bin/bash
+
+# Check if executing script (wrong!!!)
+if [ "$(basename $0)" == "source-me" ]; then
+    echo "You should source this script, not run it"
+    exit 1
+fi
+
+# Clone OpenZWave if not done
+if [[  -d $HOME/open-zwave ]]; then
+    echo "Already cloned."
+else
+    git clone https://github.com/OpenZWave/open-zwave.git $HOME/open-zwave
+fi
+
+# Export env variables
+export OZW_ROOT=${HOME}/open-zwave
+export OZW_CPP=${OZW_ROOT}/cpp
+export OZW_SRC=${OZW_CPP}/src
+export OZW_CMD_CLASSES=${OZW_SRC}/command_classes
+export OZW_AES=${OZW_SRC}/aes
+export OZW_PLATFORM=${OZW_SRC}/platform
+export OZW_VALUE_CLASSES=${OZW_SRC}/value_classes
+export OZW_SYSCONFDIR=/etc/openzwave
+
+export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$OZW_ROOT
+
+echo "Done."
