@@ -36,11 +36,12 @@ static bool   g_initFailed = false;
 
 static struct option  long_options[] =
 {
-    {"verbose"  , no_argument       , 0             , 'v'   },
-    {"port"     , required_argument , 0             , 'p'   },
-    {"config"   , required_argument , 0             , 'c'   },
-    {"help"     , no_argument       , 0             , 'h'   },
-    {0          , 0                 , 0             , 0     },
+    {"verbose"      , no_argument       , 0             , 'v'   },
+    {"interactive"  , no_argument       , 0             , 'i'   },
+    {"port"         , required_argument , 0             , 'p'   },
+    {"config"       , required_argument , 0             , 'c'   },
+    {"help"         , no_argument       , 0             , 'h'   },
+    {0              , 0                 , 0             , 0     },
 };
 
 typedef struct
@@ -58,25 +59,22 @@ static pthread_mutex_t initMutex = PTHREAD_MUTEX_INITIALIZER;
 
 bool ToggleSwitchBinary(const int node_Id, bool status)
 {
-    cout << "Setting new status: " << status << " to node ID " << node_Id << endl;
     bool result {true};
     pthread_mutex_lock (&g_criticalSection);
     for (list<NodeInfo *>::iterator it = g_nodes.begin(); it != g_nodes.end(); ++it)
     {
         NodeInfo * nd = *it;
-        cout << left << setw(20) << "Current NodeID:" << static_cast<int>(nd->m_nodeId) << endl;
         if (nd->m_nodeId == node_Id)
         {
-            cout << "The list of values of the current NodeInfo(nodeId=" << static_cast<int>(nd->m_nodeId) << ") "
-                << (nd->m_values.empty() ? "is empty" : "contains something!") << endl;
             for (list<ValueID>::iterator it2 = nd->m_values.begin(); it2 != nd->m_values.end(); ++it2)
             {
                 ValueID v = *it2;
-                cout << "v.GetCommandClassId() = 0x" << hex << static_cast<int>(v.GetCommandClassId()) << dec << endl;
                 if (v.GetCommandClassId() == SwitchBinary::StaticGetCommandClassId())
                 {
-                    cout << "Setting value ..." << endl;
-                    Manager::Get()->SetValue(v, status);
+                    result = Manager::Get()->SetValue(v, status);
+                    string val{};
+                    Manager::Get()->GetValueAsString(v, &val);
+                    cout << "New status is:\t" << val << endl;
                 }
             }
         }
@@ -95,6 +93,7 @@ void help(string program)
     cout << left << setw(width - internal_width) << "--config" << setw(internal_width) << "<dir>"
         << "Choose where the config files are stored." << endl;
     cout << left << setw(width) << "--help" << "Show this help and exit." << right << endl;
+    cout << left << setw(width) << "--interactive" << "Run toggling interactively." << endl;
     cout << left << setw(width - internal_width) << "--port" << setw(internal_width) << "<tty>"
         << "Choose USB serial port." << endl;
     cout << left << setw(width) << "--silent" << "Don't output anything to console." << endl;
@@ -279,14 +278,14 @@ int main( int argc, char* argv[] )
     int c, optindex;
     bool create_success {false}, new_status;
     pthread_mutexattr_t mutexattr;
-    bool verbose = false;
+    bool verbose = false, interactive = false;
 
     /* Default port */
     string port{ "/dev/ttyACM0" };
     string config{ "./config/" };
 
     /* Parse command line options */
-    while ( (c = getopt_long(argc, argv, "c:hp:v", long_options, &optindex)) != -1)
+    while ( (c = getopt_long(argc, argv, "c:hip:v", long_options, &optindex)) != -1)
     {
         switch (c)
         {
@@ -296,6 +295,9 @@ int main( int argc, char* argv[] )
             case 'h':
                 help( string{argv[0]} );
                 return 0;
+            case 'i':
+                interactive = true;
+                break;
             case 'p':
                 port = string{optarg};
                 break;
@@ -370,12 +372,27 @@ int main( int argc, char* argv[] )
     pthread_cond_wait( &initCond, &initMutex );
 
 
+    string opt{};
     for (;;)
     {
-        ToggleSwitchBinary(SWITCH_BINARY_ID, new_status);
-        new_status = !new_status;
+        if (interactive)
+        {
+            cout << "Switch on/off?: ";
+            cin >> opt;
+            if (opt != "on" && opt != "off")
+            {
+                cerr << "on / off valid" << endl;
+                break;
+            }
+            ToggleSwitchBinary(SWITCH_BINARY_ID, (opt == "on" ? true : false));
+        }
+        else
+        {
+            ToggleSwitchBinary(SWITCH_BINARY_ID, new_status);
+            new_status = !new_status;
+            sleep(3);
+        }
 
-        sleep(1);
     }
 
     Manager::Get()->RemoveDriver( port );
