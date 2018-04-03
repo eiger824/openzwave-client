@@ -24,7 +24,7 @@ ${PROGRAM}: main.o
 	rm -f ${PROGNAME}
 	ln -s ${PROGRAM} ${PROGNAME}
 
-main.o: main.cpp
+%.o: %.cpp
 	${CXX} ${CXXFLAGS} $< -o $@
 
 clean:
